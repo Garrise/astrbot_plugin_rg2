@@ -197,25 +197,6 @@ AI：🔫 游戏进行中
 
 ## 📞 支持
 
-如有问题请访问 [GitHub仓库](https://github.com/piexian/astrbot_plugin_rg2) 提交issue。
-
-## 🎨 插件Logo
-
-插件支持自定义Logo显示在插件市场中：
-- 在插件根目录添加 `logo.png` 文件
-- 保持长宽比为 1:1
-- 推荐尺寸：256x256 像素
-- 支持版本：AstrBot v4.5.0+
-
-## ⚙️ 技术更新
-
-### v1.0.0 新特性
-- ✅ 指令优化：装填和开枪指令独立，使用更便捷
-- ✅ 函数工具类：采用新版函数工具类形式（AstrBot v4.5.1+）
-- ✅ 插件展示名：支持 `display_name` 字段
-- ✅ 插件Logo：支持自定义Logo显示
-- ✅ 状态共享：函数工具与插件主类状态同步
-
----
+如有问题请访问 [GitHub仓库](https://github.com/piexian/astrbot_plugin_rg2/issues) 提交issue。
 
 **🔫 准备好了吗？来一局刺激的左轮手枪对决吧！**
