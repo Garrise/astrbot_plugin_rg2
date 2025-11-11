@@ -199,4 +199,8 @@ AI：🔫 游戏进行中
 
 如有问题请访问 [GitHub仓库](https://github.com/piexian/astrbot_plugin_rg2/issues) 提交issue。
 
+## 🙏 致谢
+
+本项目基于 **[astrbot_plugin_rg](https://github.com/zgojin/astrbot_plugin_rg)** 进行修改和优化，感谢原作者 [zgojin](https://github.com/zgojin) 的开源贡献！
+
 **🔫 准备好了吗？来一局刺激的左轮手枪对决吧！**
