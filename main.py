@@ -11,6 +11,9 @@ from astrbot.api import logger
 # 插件元数据
 from .metadata import metadata
 
+# 文本管理器
+from .text_manager import text_manager
+
 # 导入事件类型
 try:
     from astrbot.core.star.filter.event_message_type import EventMessageType
@@ -410,8 +413,10 @@ class RevolverGunPlugin(Star):
 
             logger.info(f"用户 {user_name} 在群 {group_id} 装填 {bullet_count} 发子弹")
             
+            # 使用YAML文本
+            load_msg = text_manager.get_text('load_messages', sender_nickname=user_name)
             yield event.plain_result(
-                f"🔫 {user_name} 装填 {bullet_count} 发子弹！\n"
+                f"🔫 {load_msg}\n"
                 f"💀 {CHAMBER_COUNT} 弹膛，生死一线！\n"
                 f"⚡ 限时 {self.timeout} 秒！"
             )
@@ -466,9 +471,12 @@ class RevolverGunPlugin(Star):
                 
                 logger.info(f"用户 {user_name}({user_id}) 在群 {group_id} 中弹")
                 
+                # 使用YAML文本
+                trigger_msg = text_manager.get_text('trigger_descriptions')
+                reaction_msg = text_manager.get_text('user_reactions', sender_nickname=user_name)
                 yield event.plain_result(
-                    f"💥 枪声炸响！\n"
-                    f"😱 {user_name} 中弹倒地！\n"
+                    f"💥 {trigger_msg}\n"
+                    f"😱 {reaction_msg}\n"
                     f"{ban_msg}"
                 )
             else:
@@ -477,10 +485,9 @@ class RevolverGunPlugin(Star):
                 
                 logger.info(f"用户 {user_name}({user_id}) 在群 {group_id} 空弹逃生")
                 
-                yield event.plain_result(
-                    f"🎲 咔哒！空弹！\n"
-                    f"😅 {user_name} 逃过一劫！"
-                )
+                # 使用YAML文本
+                miss_msg = text_manager.get_text('miss_messages', sender_nickname=user_name)
+                yield event.plain_result(miss_msg)
 
             # 检查游戏结束
             remaining = sum(chambers)
@@ -492,7 +499,9 @@ class RevolverGunPlugin(Star):
                 
                 del self.group_games[group_id]
                 logger.info(f"群 {group_id} 游戏结束")
-                yield event.plain_result("🏁 游戏结束！\n🔄 再来一局？")
+                # 使用YAML文本
+                end_msg = text_manager.get_text('game_end')
+                yield event.plain_result(f"🏁 {end_msg}\n🔄 再来一局？")
                 
         except Exception as e:
             logger.error(f"开枪失败: {e}")
@@ -658,9 +667,12 @@ class RevolverGunPlugin(Star):
                 
                 logger.info(f"群 {group_id} 用户 {user_name}({user_id}) 触发随机走火")
                 
+                # 使用YAML文本
+                misfire_desc = text_manager.get_text('misfire_descriptions')
+                reaction_msg = text_manager.get_text('user_reactions', sender_nickname=user_name)
                 yield event.plain_result(
-                    f"💥 砰！手枪走火！\n"
-                    f"😱 {user_name} 不幸中弹！\n"
+                    f"💥 {misfire_desc}\n"
+                    f"😱 {reaction_msg}\n"
                     f"{ban_msg}"
                 )
         except Exception as e:

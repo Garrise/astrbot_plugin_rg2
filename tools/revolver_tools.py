@@ -4,6 +4,9 @@ from typing import Optional
 import random
 import datetime
 
+# 文本管理器
+from ..text_manager import text_manager
+
 CHAMBER_COUNT = 6
 
 class StartRevolverGameTool(FunctionTool):
@@ -82,9 +85,10 @@ class StartRevolverGameTool(FunctionTool):
             }
 
             user_name = self._get_user_name(event)
+            load_msg = text_manager.get_text('load_messages', sender_nickname=user_name)
             return (
                 f"🎯 {user_name} 挑战命运！\n"
-                f"🔫 装填 {bullets} 发子弹！\n"
+                f"🔫 {load_msg}\n"
                 f"💀 谁敢扣动扳机？"
             )
         except Exception as e:
@@ -145,7 +149,8 @@ class JoinRevolverGameTool(FunctionTool):
                     ban_duration = await self.plugin._ban_user(event, user_id)
                     if ban_duration > 0:
                         formatted_duration = self.plugin._format_ban_duration(ban_duration)
-                        result = f"💥 {user_name} 中弹！\n🔇 禁言 {formatted_duration}"
+                        trigger_msg = text_manager.get_text('trigger_descriptions')
+                        result = f"💥 {trigger_msg}\n🔇 禁言 {formatted_duration}"
                     else:
                         result = f"💥 {user_name} 中弹！\n⚠️ 管理员/群主免疫！"
                 else:
@@ -154,12 +159,14 @@ class JoinRevolverGameTool(FunctionTool):
             else:
                 # 空弹
                 game['current'] = (current + 1) % CHAMBER_COUNT
-                result = f"🎲 {user_name} 逃过一劫！"
+                miss_msg = text_manager.get_text('miss_messages', sender_nickname=user_name)
+                result = miss_msg
 
             # 检查结束
             if sum(chambers) == 0:
                 del self.group_games[group_id]
-                result += "\n🏁 游戏结束！"
+                end_msg = text_manager.get_text('game_end')
+                result += f"\n🏁 {end_msg}！"
 
             return result
         except Exception as e:
@@ -204,10 +211,11 @@ class CheckRevolverStatusTool(FunctionTool):
             current = game['current']
             remaining = sum(chambers)
             
+            status_msg = text_manager.get_text('game_status')
             danger = "🔴 危险" if chambers[current] else "🟢 安全"
             
             return (
-                f"🔫 游戏进行中\n"
+                f"🔫 {status_msg}\n"
                 f"📊 剩余：{remaining}发子弹\n"
                 f"🎯 第{current + 1}膛\n"
                 f"{danger}"
