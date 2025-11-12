@@ -9,7 +9,7 @@ AstrBot 左轮手枪对决插件
 - 禁言惩罚机制
 
 作者: piexian
-版本: 1.0.0
+版本: 1.1.0
 仓库: https://github.com/piexian/astrbot_plugin_rg2
 """
 

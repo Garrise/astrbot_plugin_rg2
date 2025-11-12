@@ -3,7 +3,7 @@
 基于 AstrBot 官方插件规范开发的群聊轮盘赌游戏插件，采用现代化代码架构，提供刺激的左轮手枪对决体验。
 
 [![AstrBot Plugin](https://img.shields.io/badge/AstrBot-Plugin-blue.svg)](https://docs.astrbot.app/)
-[![Version](https://img.shields.io/badge/version-1.0.0-green.svg)](https://github.com/piexian/astrbot_plugin_rg)
+[![Version](https://img.shields.io/badge/version-1.1.0-green.svg)](https://github.com/piexian/astrbot_plugin_rg)
 [![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/)
 
 ## ✨ 核心特性
@@ -16,6 +16,10 @@
 - **⏰ 超时机制**：自动结束闲置游戏（120秒超时）
 - **🛡️ 错误处理**：完善的异常捕获和日志记录
 - **📊 状态管理**：高效的并发游戏状态管理
+
+## 📋 更新日志
+
+想了解最新版本更新内容？请查看 [CHANGELOG.md](./CHANGELOG.md) 文件获取详细的版本历史、功能改进和Bug修复记录。
 
 ## 🚀 快速开始
 
@@ -227,6 +231,15 @@ AI：🎯 用户名称 挑战命运！
 - **一致性**：AI工具与指令功能统一
 
 ## 🔄 版本历史
+
+详细的版本更新日志请查看 [CHANGELOG.md](./CHANGELOG.md) 文件。
+
+### v1.1.0 (2024-11-13)
+- 🐛 修复 AI 工具无法访问游戏状态的问题
+- 🐛 修复 AI 工具缺少超时机制的问题  
+- 🐛 修复 AI 工具游戏结束清理不完整的问题
+- 🎯 增强工具描述清晰度，帮助 AI 更准确选择工具
+- 🛡️ 改进空值安全性
 
 ### v1.0.0 (2024-11-12)
 - ✨ 基于AstrBot官方规范全新开发

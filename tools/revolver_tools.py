@@ -83,6 +83,10 @@ class StartRevolverGameTool(FunctionTool, BaseRevolverTool):
                 "start_time": datetime.datetime.now(),
             }
 
+            # 启动超时机制
+            if self.plugin and hasattr(self.plugin, '_start_timeout'):
+                await self.plugin._start_timeout(event, group_id)
+
             user_name = self._get_user_name(event)
             load_msg = text_manager.get_text("load_messages", sender_nickname=user_name)
             return f"🎯 {user_name} 挑战命运！\n🔫 {load_msg}\n💀 谁敢扣动扳机？"
@@ -111,7 +115,7 @@ class JoinRevolverGameTool(FunctionTool, BaseRevolverTool):
             if not group_id:
                 return "❌ 仅限群聊使用"
 
-            game = self.group_games.get(group_id)
+            game = self.plugin.group_games.get(group_id)
             if not game:
                 return "⚠️ 没有游戏进行中\n💡 使用 /装填 开始游戏（随机装填）\n💡 管理员可使用 /装填 [数量] 指定子弹"
 
@@ -167,6 +171,15 @@ class JoinRevolverGameTool(FunctionTool, BaseRevolverTool):
 
             # 检查结束
             if sum(chambers) == 0:
+                # 清理超时任务（如果存在）
+                if hasattr(self.plugin, 'timeout_tasks') and group_id in self.plugin.timeout_tasks:
+                    task = self.plugin.timeout_tasks[group_id]
+                    if not task.done():
+                        task.cancel()
+                    # 确保从字典中移除（无论是否存在）
+                    self.plugin.timeout_tasks.pop(group_id, None)
+                
+                # 清理游戏状态
                 del self.plugin.group_games[group_id]
                 end_msg = text_manager.get_text("game_end")
                 result += f"\n🏁 {end_msg}！"
@@ -197,7 +210,7 @@ class CheckRevolverStatusTool(FunctionTool, BaseRevolverTool):
             if not group_id:
                 return "❌ 仅限群聊使用"
 
-            game = self.group_games.get(group_id)
+            game = self.plugin.group_games.get(group_id)
             if not game:
                 return "🔍 没有游戏进行中\n💡 使用 /装填 开始游戏（随机装填）\n💡 管理员可使用 /装填 [数量] 指定子弹"
 
