@@ -1,20 +1,23 @@
 from astrbot.api import FunctionTool
 from astrbot.api.event import AstrMessageEvent
-from dataclasses import dataclass, field
 from typing import Optional
 import random
 import datetime
 
 CHAMBER_COUNT = 6
 
-@dataclass
 class StartRevolverGameTool(FunctionTool):
     """AI启动左轮手枪游戏的工具类"""
     
-    name: str = "start_revolver_game"
-    description: str = "Start a new game of Russian Roulette. Use this when user wants to play, start a new round, or says '再来一局' (play again). If bullet count is not specified, random bullets (1-6) will be loaded."
-    parameters: dict = field(
-        default_factory=lambda: {
+    def __init__(self, plugin_instance=None):
+        """初始化工具
+        
+        Args:
+            plugin_instance: 插件实例，用于访问禁言等方法
+        """
+        self.name = "start_revolver_game"
+        self.description = "Start a new game of Russian Roulette. Use this when user wants to play, start a new round, or says '再来一局' (play again). If bullet count is not specified, random bullets (1-6) will be loaded."
+        self.parameters = {
             "type": "object",
             "properties": {
                 "bullets": {
@@ -26,12 +29,9 @@ class StartRevolverGameTool(FunctionTool):
             },
             "required": []
         }
-    )
-    
-    def __post_init__(self):
-        """初始化游戏状态存储"""
         self.group_games = {}
         self.group_misfire = {}
+        self.plugin = plugin_instance
     
     def _get_group_id(self, event: AstrMessageEvent) -> Optional[int]:
         """获取群ID"""
@@ -91,23 +91,24 @@ class StartRevolverGameTool(FunctionTool):
             return f"❌ Failed to start game: {str(e)}"
 
 
-@dataclass
 class JoinRevolverGameTool(FunctionTool):
     """AI参与左轮手枪游戏的工具类"""
     
-    name: str = "join_revolver_game"
-    description: str = "Join the current Russian Roulette game by pulling the trigger. Use this when user says '我要玩', '我也要', '开枪', 'shoot', or wants to participate in an ongoing game."
-    parameters: dict = field(
-        default_factory=lambda: {
+    def __init__(self, plugin_instance=None):
+        """初始化工具
+        
+        Args:
+            plugin_instance: 插件实例，用于访问禁言等方法
+        """
+        self.name = "join_revolver_game"
+        self.description = "Join the current Russian Roulette game by pulling the trigger. Use this when user says '我要玩', '我也要', '开枪', 'shoot', or wants to participate in an ongoing game."
+        self.parameters = {
             "type": "object",
             "properties": {},
             "required": []
         }
-    )
-    
-    def __post_init__(self):
-        """初始化游戏状态存储"""
         self.group_games = {}
+        self.plugin = plugin_instance
     
     def _get_group_id(self, event: AstrMessageEvent) -> Optional[int]:
         """获取群ID"""
@@ -138,7 +139,18 @@ class JoinRevolverGameTool(FunctionTool):
                 # 中弹
                 chambers[current] = False
                 game['current'] = (current + 1) % CHAMBER_COUNT
-                result = f"💥 {user_name} 中弹！\n🔇 接受惩罚..."
+                
+                # 如果有插件实例，执行禁言
+                if self.plugin and hasattr(self.plugin, '_ban_user'):
+                    ban_duration = await self.plugin._ban_user(event, user_id)
+                    if ban_duration > 0:
+                        formatted_duration = self.plugin._format_ban_duration(ban_duration)
+                        result = f"💥 {user_name} 中弹！\n🔇 禁言 {formatted_duration}"
+                    else:
+                        result = f"💥 {user_name} 中弹！\n⚠️ 管理员/群主免疫！"
+                else:
+                    # 没有插件实例，只返回文本
+                    result = f"💥 {user_name} 中弹！\n🔇 接受惩罚..."
             else:
                 # 空弹
                 game['current'] = (current + 1) % CHAMBER_COUNT
@@ -154,23 +166,24 @@ class JoinRevolverGameTool(FunctionTool):
             return f"❌ Failed to join game: {str(e)}"
 
 
-@dataclass
 class CheckRevolverStatusTool(FunctionTool):
     """AI查询左轮手枪游戏状态的工具类"""
     
-    name: str = "check_revolver_status"
-    description: str = "Check the current status of the Russian Roulette game. Use this when user asks about game status, wants to know remaining bullets, or says '状态', 'status', '游戏情况'."
-    parameters: dict = field(
-        default_factory=lambda: {
+    def __init__(self, plugin_instance=None):
+        """初始化工具
+        
+        Args:
+            plugin_instance: 插件实例，用于访问禁言等方法
+        """
+        self.name = "check_revolver_status"
+        self.description = "Check the current status of the Russian Roulette game. Use this when user asks about game status, wants to know remaining bullets, or says '状态', 'status', '游戏情况'."
+        self.parameters = {
             "type": "object",
             "properties": {},
             "required": []
         }
-    )
-    
-    def __post_init__(self):
-        """初始化游戏状态存储"""
         self.group_games = {}
+        self.plugin = plugin_instance
     
     def _get_group_id(self, event: AstrMessageEvent) -> Optional[int]:
         """获取群ID"""

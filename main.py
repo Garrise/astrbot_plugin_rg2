@@ -1,9 +1,15 @@
 import random
 import datetime
+import asyncio
+import json
 from typing import Dict, List, Optional, Any
+from pathlib import Path
 from astrbot.api.event import filter, AstrMessageEvent
-from astrbot.api.star import Context, Star, register
+from astrbot.api.star import Context, Star, register, StarTools
 from astrbot.api import logger
+
+# 插件元数据
+from .metadata import metadata
 
 # 导入事件类型
 try:
@@ -13,17 +19,17 @@ except ImportError:
     EventMessageType = None
 
 CHAMBER_COUNT = 6
-DEFAULT_TIMEOUT = 60
-DEFAULT_MISFIRE_PROB = 0.005
+DEFAULT_TIMEOUT = 120
+DEFAULT_MISFIRE_PROB = 0.003
 DEFAULT_MIN_BAN = 60
 DEFAULT_MAX_BAN = 300
 
 @register(
-    "astrbot_plugin_rg2",
-    "piexian", 
-    "一个刺激的群聊轮盘赌游戏插件。支持管理员装填子弹、用户开枪对决、随机走火等功能，提供完整的游戏体验和AI自然语言交互支持。",
-    "1.0.0",
-    "https://github.com/piexian/astrbot_plugin_rg2"
+    metadata.name,
+    metadata.author, 
+    metadata.description,
+    metadata.version,
+    metadata.repo
 )
 class RevolverGunPlugin(Star):
     def __init__(self, context: Context, config: Optional[Dict] = None):
@@ -40,6 +46,14 @@ class RevolverGunPlugin(Star):
         # 游戏状态管理
         self.group_games: Dict[int, Dict] = {}
         self.group_misfire: Dict[int, bool] = {}
+        self.timeout_tasks: Dict[int, asyncio.Task] = {}
+        
+        # 数据持久化
+        self.data_dir = StarTools.get_data_dir("astrbot_plugin_rg2")
+        self.config_file = self.data_dir / "group_misfire.json"
+        
+        # 加载持久化配置
+        self._load_misfire_config()
         
         # 配置参数
         self.timeout = self.config.get("timeout_seconds", DEFAULT_TIMEOUT)
@@ -60,10 +74,10 @@ class RevolverGunPlugin(Star):
                 CheckRevolverStatusTool
             )
             
-            # 初始化工具并传递游戏状态
-            start_tool = StartRevolverGameTool()
-            join_tool = JoinRevolverGameTool()
-            check_tool = CheckRevolverStatusTool()
+            # 初始化工具并传递插件实例和游戏状态
+            start_tool = StartRevolverGameTool(plugin_instance=self)
+            join_tool = JoinRevolverGameTool(plugin_instance=self)
+            check_tool = CheckRevolverStatusTool(plugin_instance=self)
             
             # 共享游戏状态
             start_tool.group_games = self.group_games
@@ -150,6 +164,31 @@ class RevolverGunPlugin(Star):
         """
         if group_id not in self.group_misfire:
             self.group_misfire[group_id] = self.default_misfire
+    
+    def _load_misfire_config(self):
+        """加载走火配置"""
+        try:
+            import json
+            if self.config_file.exists():
+                with open(self.config_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    self.group_misfire.update(data)
+                logger.info(f"已加载 {len(data)} 个群的走火配置")
+            else:
+                logger.info("未找到走火配置文件，使用默认配置")
+        except Exception as e:
+            logger.error(f"加载走火配置失败: {e}")
+    
+    def _save_misfire_config(self):
+        """保存走火配置"""
+        try:
+            import json
+            self.data_dir.mkdir(parents=True, exist_ok=True)
+            with open(self.config_file, 'w', encoding='utf-8') as f:
+                json.dump(self.group_misfire, f, ensure_ascii=False, indent=2)
+            logger.debug(f"已保存 {len(self.group_misfire)} 个群的走火配置")
+        except Exception as e:
+            logger.error(f"保存走火配置失败: {e}")
 
     def _create_chambers(self, bullet_count: int) -> List[bool]:
         """创建弹膛状态
@@ -446,6 +485,11 @@ class RevolverGunPlugin(Star):
             # 检查游戏结束
             remaining = sum(chambers)
             if remaining == 0:
+                # 取消超时任务
+                if group_id in self.timeout_tasks:
+                    self.timeout_tasks[group_id].cancel()
+                    del self.timeout_tasks[group_id]
+                
                 del self.group_games[group_id]
                 logger.info(f"群 {group_id} 游戏结束")
                 yield event.plain_result("🏁 游戏结束！\n🔄 再来一局？")
@@ -547,6 +591,7 @@ class RevolverGunPlugin(Star):
 
             self._init_group(group_id)
             self.group_misfire[group_id] = True
+            self._save_misfire_config()
             logger.info(f"群 {group_id} 随机走火已开启")
             yield event.plain_result("🔥 随机走火已开启！")
         except Exception as e:
@@ -574,6 +619,7 @@ class RevolverGunPlugin(Star):
 
             self._init_group(group_id)
             self.group_misfire[group_id] = False
+            self._save_misfire_config()
             logger.info(f"群 {group_id} 随机走火已关闭")
             yield event.plain_result("💤 随机走火已关闭！")
         except Exception as e:
@@ -630,10 +676,41 @@ class RevolverGunPlugin(Star):
             group_id: 群ID
             
         Note:
-            当前为简化实现，实际可集成定时器机制
+            使用 asyncio 创建后台任务，超时后自动结束游戏
         """
-        # TODO: 集成定时器机制，超时后自动结束游戏
-        pass
+        # 取消之前的超时任务（如果存在）
+        if group_id in self.timeout_tasks:
+            task = self.timeout_tasks[group_id]
+            if not task.done():
+                task.cancel()
+        
+        # 创建新的超时任务
+        async def timeout_check():
+            try:
+                await asyncio.sleep(self.timeout)
+                # 检查游戏是否还在进行
+                if group_id in self.group_games:
+                    game = self.group_games[group_id]
+                    # 发送超时通知
+                    await event.send_message(
+                        event.plain_result(
+                            f"⏰ 游戏超时！\n"
+                            f"⏱️ {self.timeout} 秒无人操作\n"
+                            f"🏁 游戏已自动结束"
+                        )
+                    )
+                    # 清理游戏状态
+                    del self.group_games[group_id]
+                    logger.info(f"群 {group_id} 游戏因超时而结束")
+            except asyncio.CancelledError:
+                # 任务被取消，说明有新操作
+                pass
+            except Exception as e:
+                logger.error(f"超时检查失败: {e}")
+        
+        # 启动超时任务
+        self.timeout_tasks[group_id] = asyncio.create_task(timeout_check())
+        logger.debug(f"群 {group_id} 超时任务已启动，{self.timeout} 秒后触发")
 
     async def terminate(self):
         """插件卸载清理
@@ -641,14 +718,26 @@ class RevolverGunPlugin(Star):
         清理所有游戏状态和配置，确保插件安全卸载
         """
         try:
+            # 先记录数量再清理
+            num_games = len(self.group_games)
+            num_configs = len(self.group_misfire)
+            num_tasks = len(self.timeout_tasks)
+            
+            # 取消所有超时任务
+            for task in self.timeout_tasks.values():
+                if not task.done():
+                    task.cancel()
+            
             # 清理游戏状态
             self.group_games.clear()
             self.group_misfire.clear()
+            self.timeout_tasks.clear()
             
             # 记录卸载日志
             logger.info("左轮手枪插件 v1.0 已安全卸载")
-            logger.info(f"清理了 {len(self.group_games)} 个游戏状态")
-            logger.info(f"清理了 {len(self.group_misfire)} 个群配置")
+            logger.info(f"清理了 {num_games} 个游戏状态")
+            logger.info(f"清理了 {num_configs} 个群配置")
+            logger.info(f"取消了 {num_tasks} 个超时任务")
         except Exception as e:
             logger.error(f"插件卸载失败: {e}")
             # 即使清理失败也不抛出异常，确保插件能够卸载
