@@ -9,7 +9,9 @@ from astrbot.api import logger
 # 插件元数据
 PLUGIN_NAME = "astrbot_plugin_rg2"
 PLUGIN_AUTHOR = "piexian"
-PLUGIN_DESCRIPTION = "一个刺激的群聊轮盘赌游戏插件，支持管理员装填子弹、用户开枪对决、随机走火等功能"
+PLUGIN_DESCRIPTION = (
+    "一个刺激的群聊轮盘赌游戏插件，支持管理员装填子弹、用户开枪对决、随机走火等功能"
+)
 PLUGIN_VERSION = "1.1.0"
 PLUGIN_REPO = "https://github.com/piexian/astrbot_plugin_rg2"
 

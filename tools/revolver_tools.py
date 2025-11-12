@@ -20,10 +20,11 @@ class BaseRevolverTool:
 
     def _get_text_manager(self):
         """获取文本管理器实例"""
-        if hasattr(self.plugin, 'text_manager'):
+        if hasattr(self.plugin, "text_manager"):
             return self.plugin.text_manager
         # 回退到全局text_manager
         from ..text_manager import text_manager as fallback
+
         return fallback
 
 
@@ -95,7 +96,9 @@ class StartRevolverGameTool(FunctionTool, BaseRevolverTool):
                 await self.plugin._start_timeout(event, group_id)
 
             user_name = self._get_user_name(event)
-            load_msg = self._get_text_manager().get_text("load_messages", sender_nickname=user_name)
+            load_msg = self._get_text_manager().get_text(
+                "load_messages", sender_nickname=user_name
+            )
             return f"🎯 {user_name} 挑战命运！\n🔫 {load_msg}\n💀 谁敢扣动扳机？"
         except Exception as e:
             return f"❌ Failed to start game: {str(e)}"
@@ -162,7 +165,9 @@ class JoinRevolverGameTool(FunctionTool, BaseRevolverTool):
                             formatted_duration = self.plugin._format_ban_duration(
                                 ban_duration
                             )
-                            trigger_msg = self._get_text_manager().get_text("trigger_descriptions")
+                            trigger_msg = self._get_text_manager().get_text(
+                                "trigger_descriptions"
+                            )
                             result = f"💥 {trigger_msg}\n🔇 禁言 {formatted_duration}"
                         else:
                             result = f"💥 {user_name} 中弹！\n⚠️ 禁言失败！"
@@ -173,7 +178,9 @@ class JoinRevolverGameTool(FunctionTool, BaseRevolverTool):
                         formatted_duration = self.plugin._format_ban_duration(
                             ban_duration
                         )
-                        trigger_msg = self._get_text_manager().get_text("trigger_descriptions")
+                        trigger_msg = self._get_text_manager().get_text(
+                            "trigger_descriptions"
+                        )
                         result = f"💥 {trigger_msg}\n🔇 禁言 {formatted_duration}"
                     else:
                         result = f"💥 {user_name} 中弹！\n⚠️ 管理员/群主免疫！"
