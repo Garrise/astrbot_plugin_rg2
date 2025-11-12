@@ -32,7 +32,9 @@ class StartRevolverGameTool(FunctionTool, BaseRevolverTool):
             plugin_instance: 插件实例，用于访问禁言等方法
         """
         self.name = "start_revolver_game"
-        self.description = "Start a new game of Russian Roulette. Use this when user wants to play, start a new round, or says '再来一局' (play again). If bullet count is not specified, random bullets (1-6) will be loaded."
+        self.description = """Start a new game of Russian Roulette. Use this when user wants to play, start a new round, or says '再来一局' (play again). If bullet count is not specified, random bullets (1-6) will be loaded.
+        
+        CRITICAL INSTRUCTION: When you receive the result from this tool, you must output it EXACTLY as given without ANY modification, rephrasing, or adding personal commentary. Do NOT add phrases like '我来帮你' or '游戏开始了' - just output the tool's result directly."""
         self.parameters = {
             "type": "object",
             "properties": {
@@ -104,11 +106,23 @@ class JoinRevolverGameTool(FunctionTool, BaseRevolverTool):
             plugin_instance: 插件实例，用于访问禁言等方法
         """
         self.name = "join_revolver_game"
-        self.description = "Join the current Russian Roulette game by pulling the trigger. Use this when user says '我要玩', '我也要', '开枪', 'shoot', or wants to participate in an ongoing game."
-        self.parameters = {"type": "object", "properties": {}, "required": []}
+        self.description = """Join the current Russian Roulette game by pulling the trigger. Use this when user says '我要玩', '我也要', '开枪', 'shoot', or wants to participate in an ongoing game.
+        
+        CRITICAL INSTRUCTION: When you receive the result from this tool, you must output it EXACTLY as given without ANY modification, rephrasing, or adding personal touches. Even if the result contains emoji or specific phrasing, output it verbatim. Do NOT add explanations like '结果出来了' or '你开枪了' - just output the tool's result directly."""
+        self.parameters = {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "description": "User's action to perform in the game. Common values: 'shoot' (开枪), 'join' (加入游戏), 'participate' (参与活动). If not specified, defaults to 'shoot'.",
+                    "enum": ["shoot", "join", "participate"],
+                }
+            },
+            "required": [],
+        }
         self.plugin = plugin_instance
 
-    async def run(self, event: AstrMessageEvent) -> str:
+    async def run(self, event: AstrMessageEvent, action: str = "shoot") -> str:
         """参与游戏逻辑"""
         try:
             group_id = self._get_group_id(event)
@@ -202,11 +216,22 @@ class CheckRevolverStatusTool(FunctionTool, BaseRevolverTool):
             plugin_instance: 插件实例，用于访问禁言等方法
         """
         self.name = "check_revolver_status"
-        self.description = "Check the current status of the Russian Roulette game. Use this when user asks about game status, wants to know remaining bullets, or says '状态', 'status', '游戏情况'."
-        self.parameters = {"type": "object", "properties": {}, "required": []}
+        self.description = """Check the current status of the Russian Roulette game. Use this when user asks about game status, wants to know remaining bullets, or says '状态', 'status', '游戏情况'.
+        
+        CRITICAL INSTRUCTION: When you receive the result from this tool, you must output it EXACTLY as given without ANY modification, rephrasing, or adding personal commentary. Even if the result looks like '没有游戏进行中', output it directly. Do NOT add phrases like '根据查询' or '我来告诉你' - just output the tool's result verbatim."""
+        self.parameters = {
+            "type": "object",
+            "properties": {
+                "detailed": {
+                    "type": "boolean",
+                    "description": "Whether to return detailed game status including current chamber position and game history. If true, provides more comprehensive information. Default is false for basic status.",
+                }
+            },
+            "required": [],
+        }
         self.plugin = plugin_instance
 
-    async def run(self, event: AstrMessageEvent) -> str:
+    async def run(self, event: AstrMessageEvent, detailed: bool = False) -> str:
         """查询游戏状态逻辑"""
         try:
             group_id = self._get_group_id(event)
