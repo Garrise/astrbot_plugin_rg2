@@ -76,9 +76,6 @@ class RevolverGunPlugin(Star):
         # 注册函数工具
         self._register_function_tools()
 
-        # 注册消息装饰钩子，用于拦截工具调用结果
-        self._register_result_decorator()
-
     def _init_text_manager(self):
         """初始化文本管理器"""
         global text_manager
@@ -123,49 +120,6 @@ class RevolverGunPlugin(Star):
             logger.info("左轮手枪函数工具注册成功")
         except Exception as e:
             logger.error(f"注册函数工具失败: {e}", exc_info=True)
-
-    def _register_llm_response_hook(self):
-        """注册 LLM 响应钩子，拦截并处理工具结果"""
-        try:
-            from astrbot.api.event import filter
-
-            @filter.on_llm_response()
-            async def handle_llm_response(event: AstrMessageEvent, resp):
-                """处理 LLM 响应"""
-                # 检查是否是工具调用结果
-                if (
-                    hasattr(resp, "tools_call_name")
-                    and resp.tools_call_name
-                    and len(resp.tools_call_name) > 0
-                    and hasattr(resp, "completion_text")
-                ):
-                    import re
-
-                    # 提取工具调用结果
-                    tool_result = resp.completion_text
-
-                    # 匹配工具调用标记
-                    # AstrBot 格式: Call tool: <tool_name> with arguments: {...}\n<result>\n\n
-                    match = re.search(
-                        r"Call tool: (start_revolver_game|join_revolver_game|check_revolver_status).*?\n(.*?)\n\n",
-                        tool_result,
-                        re.DOTALL,
-                    )
-
-                    if match:
-                        match.group(1)
-                        result = match.group(2).strip()
-
-                        # 拦截工具结果，不输出原始文本
-                        async for msg in self._handle_tool_result(event, result):
-                            yield msg
-
-                        # 停止事件传播，防止原始响应被发送
-                        event.stop_event()
-
-            logger.info("LLM 响应钩子注册成功")
-        except Exception as e:
-            logger.error(f"注册 LLM 响应钩子失败: {e}", exc_info=True)
 
     def _get_group_id(self, event: AstrMessageEvent) -> Optional[int]:
         """获取群ID
@@ -439,110 +393,6 @@ class RevolverGunPlugin(Star):
                 logger.error("💡 解决方法：将机器人设置为群管理员")
 
         return 0
-
-    async def _handle_tool_result(self, event: AstrMessageEvent, tool_result: str):
-        """处理工具返回的游戏动作指令
-
-        Args:
-            event: 消息事件对象
-            tool_result: 工具返回的指令字符串
-        """
-        try:
-            if not tool_result or ":" not in tool_result:
-                yield event.plain_result(tool_result)
-                return
-
-            parts = tool_result.split(":", 1)
-            action = parts[0]
-            data = parts[1] if len(parts) > 1 else ""
-
-            if action == "error":
-                # 错误消息，直接输出
-                yield event.plain_result(data)
-
-            elif action == "game_started":
-                # 游戏开始
-                _, group_id_str, bullet_count_str = tool_result.split(":")
-                int(group_id_str)
-                int(bullet_count_str)
-
-                user_name = self._get_user_name(event)
-                load_msg = text_manager.get_text(
-                    "load_messages", sender_nickname=user_name
-                )
-
-                yield event.plain_result(
-                    f"🎯 {user_name} 挑战命运！\n🔫 {load_msg}\n💀 谁敢扣动扳机？"
-                )
-
-            elif action == "game_action":
-                # 游戏动作（开枪）
-                _, group_id_str, user_id_str, user_name, action_code, game_ended_str = (
-                    tool_result.split(":")
-                )
-                int(group_id_str)
-                user_id = int(user_id_str)
-                hit = action_code == "hit"
-                game_ended = game_ended_str == "True"
-
-                if hit:
-                    # 中弹
-                    if not await self._is_user_bannable(event, user_id):
-                        # 管理员/群主免疫
-                        result = f"💥 枪声炸响！\n😱 {user_name} 中弹倒地！\n⚠️ 管理员/群主免疫！"
-                    else:
-                        # 普通用户，执行禁言
-                        ban_duration = await self._ban_user(event, user_id)
-                        if ban_duration > 0:
-                            formatted_duration = self._format_ban_duration(ban_duration)
-                            trigger_msg = text_manager.get_text("trigger_descriptions")
-                            result = f"💥 {trigger_msg}\n🔇 禁言 {formatted_duration}"
-                        else:
-                            result = f"💥 {user_name} 中弹！\n⚠️ 禁言失败！"
-                else:
-                    # 空弹
-                    miss_msg = text_manager.get_text(
-                        "miss_messages", sender_nickname=user_name
-                    )
-                    result = miss_msg
-
-                if game_ended:
-                    end_msg = text_manager.get_text("game_end")
-                    result += f"\n🏁 {end_msg}！"
-
-                yield event.plain_result(result)
-
-            elif action == "game_status":
-                # 游戏状态查询
-                _, group_id_str, remaining_str, current_str, is_danger_str = (
-                    tool_result.split(":")
-                )
-                remaining = int(remaining_str)
-                current = int(current_str)
-                is_danger = is_danger_str == "True"
-
-                status_msg = text_manager.get_text("game_status")
-                danger = "🔴 危险" if is_danger else "🟢 安全"
-
-                yield event.plain_result(
-                    f"🔫 {status_msg}\n"
-                    f"📊 剩余：{remaining}发子弹\n"
-                    f"🎯 第{current + 1}膛\n"
-                    f"{danger}"
-                )
-
-            elif action == "no_game":
-                yield event.plain_result(
-                    "🔍 没有游戏进行中\n💡 使用 /装填 开始游戏（随机装填）\n💡 管理员可使用 /装填 [数量] 指定子弹"
-                )
-
-            else:
-                # 未知指令，直接输出
-                yield event.plain_result(tool_result)
-
-        except Exception as e:
-            logger.error(f"处理工具结果失败: {e}", exc_info=True)
-            yield event.plain_result(f"❌ 处理失败: {str(e)}")
 
     # ========== 独立指令 ==========
 
@@ -937,6 +787,191 @@ class RevolverGunPlugin(Star):
         # 启动超时任务
         self.timeout_tasks[group_id] = asyncio.create_task(timeout_check())
         logger.debug(f"群 {group_id} 超时任务已启动，{self.timeout} 秒后触发")
+
+    # ========== AI工具调用方法 ==========
+
+    async def ai_start_game(self, event: AstrMessageEvent, bullets: Optional[int] = None):
+        """AI启动游戏 - 供AI工具调用
+        
+        Args:
+            event: 消息事件对象
+            bullets: 子弹数量(可选)
+        """
+        try:
+            group_id = self._get_group_id(event)
+            if not group_id:
+                await event.send("❌ 仅限群聊使用")
+                return
+
+            self._init_group(group_id)
+            user_name = self._get_user_name(event)
+
+            # 检查是否已有游戏
+            if group_id in self.group_games:
+                await event.send(f"💥 {user_name}，游戏还在进行中！")
+                return
+
+            # 解析子弹数量
+            if bullets is not None and 1 <= bullets <= CHAMBER_COUNT:
+                # 用户指定了子弹数量，检查是否是管理员
+                if not await self._is_group_admin(event):
+                    await event.send(
+                        f"😏 {user_name}，你又不是管理才不听你的！\n💡 请使用 /装填 进行随机装填"
+                    )
+                    return
+            else:
+                # 未指定或无效数量，随机装填
+                bullets = self._get_random_bullet_count()
+
+            # 创建游戏
+            chambers = self._create_chambers(bullets)
+            self.group_games[group_id] = {
+                "chambers": chambers,
+                "current": 0,
+                "start_time": datetime.datetime.now(),
+            }
+
+            # 设置超时
+            await self._start_timeout(event, group_id)
+
+            logger.info(f"AI: 用户 {user_name} 在群 {group_id} 装填 {bullets} 发子弹")
+
+            # 使用YAML文本
+            load_msg = text_manager.get_text("load_messages", sender_nickname=user_name)
+            await event.send(
+                f"🎯 {user_name} 挑战命运！\n🔫 {load_msg}\n💀 谁敢扣动扳机？\n⚡ 限时 {self.timeout} 秒！"
+            )
+        except Exception as e:
+            logger.error(f"AI启动游戏失败: {e}")
+            await event.send("❌ 游戏启动失败，请重试")
+
+    async def ai_join_game(self, event: AstrMessageEvent):
+        """AI参与游戏 - 供AI工具调用
+        
+        Args:
+            event: 消息事件对象
+        """
+        try:
+            group_id = self._get_group_id(event)
+            if not group_id:
+                await event.send("❌ 仅限群聊使用")
+                return
+
+            self._init_group(group_id)
+            user_name = self._get_user_name(event)
+            user_id = int(event.get_sender_id())
+
+            # 检查游戏状态
+            game = self.group_games.get(group_id)
+            if not game:
+                await event.send(f"⚠️ {user_name}，枪里没子弹！")
+                return
+
+            # 重置超时
+            await self._start_timeout(event, group_id)
+
+            # 执行射击
+            chambers = game["chambers"]
+            current = game["current"]
+            hit = chambers[current]
+
+            if hit:
+                # 中弹
+                chambers[current] = False
+                game["current"] = (current + 1) % CHAMBER_COUNT
+
+                # 检查是否可禁言（管理员/群主免疫）
+                if not await self._is_user_bannable(event, user_id):
+                    logger.info(
+                        f"⏭️ AI: 用户 {user_name}({user_id}) 是管理员/群主，免疫中弹"
+                    )
+                    await event.send(
+                        f"💥 枪声炸响！\n😱 {user_name} 中弹倒地！\n⚠️ 管理员/群主免疫！"
+                    )
+                else:
+                    # 普通用户，执行禁言
+                    ban_duration = await self._ban_user(event, user_id)
+                    if ban_duration > 0:
+                        formatted_duration = self._format_ban_duration(ban_duration)
+                        ban_msg = f"🔇 禁言 {formatted_duration}"
+                    else:
+                        ban_msg = "⚠️ 禁言失败！"
+
+                    logger.info(f"💥 AI: 用户 {user_name}({user_id}) 在群 {group_id} 中弹")
+
+                    # 使用YAML文本
+                    trigger_msg = text_manager.get_text("trigger_descriptions")
+                    reaction_msg = text_manager.get_text(
+                        "user_reactions", sender_nickname=user_name
+                    )
+                    await event.send(
+                        f"💥 {trigger_msg}\n😱 {reaction_msg}\n{ban_msg}"
+                    )
+            else:
+                # 空弹
+                game["current"] = (current + 1) % CHAMBER_COUNT
+
+                logger.info(f"AI: 用户 {user_name}({user_id}) 在群 {group_id} 空弹逃生")
+
+                # 使用YAML文本
+                miss_msg = text_manager.get_text(
+                    "miss_messages", sender_nickname=user_name
+                )
+                await event.send(miss_msg)
+
+            # 检查游戏结束
+            remaining = sum(chambers)
+            if remaining == 0:
+                # 清理超时任务（如果存在）
+                if group_id in self.timeout_tasks:
+                    self.timeout_tasks[group_id].cancel()
+                self.timeout_tasks.pop(group_id, None)
+
+                # 清理游戏状态
+                del self.group_games[group_id]
+                logger.info(f"AI: 群 {group_id} 游戏结束")
+                # 使用YAML文本
+                end_msg = text_manager.get_text("game_end")
+                await event.send(f"🏁 {end_msg}\n🔄 再来一局？")
+
+        except Exception as e:
+            logger.error(f"AI参与游戏失败: {e}")
+            await event.send("❌ 操作失败，请重试")
+
+    async def ai_check_status(self, event: AstrMessageEvent):
+        """AI查询游戏状态 - 供AI工具调用
+        
+        Args:
+            event: 消息事件对象
+        """
+        try:
+            group_id = self._get_group_id(event)
+            if not group_id:
+                await event.send("❌ 仅限群聊使用")
+                return
+
+            game = self.group_games.get(group_id)
+            if not game:
+                await event.send(
+                    "🔍 没有游戏进行中\n💡 使用 /装填 开始游戏（随机装填）\n💡 管理员可使用 /装填 [数量] 指定子弹"
+                )
+                return
+
+            chambers = game["chambers"]
+            current = game["current"]
+            remaining = sum(chambers)
+
+            status = "🎯 有子弹" if chambers[current] else "🍀 安全"
+
+            await event.send(
+                f"🔫 游戏进行中\n"
+                f"📊 剩余子弹：{remaining}发\n"
+                f"🎯 当前弹膛：第{current + 1}膛\n"
+                f"{status}"
+            )
+        except Exception as e:
+            logger.error(f"AI查询状态失败: {e}")
+            await event.send("❌ 查询失败，请重试")
 
     async def terminate(self):
         """插件卸载清理

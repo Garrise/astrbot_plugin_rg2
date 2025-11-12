@@ -1,8 +1,6 @@
 from astrbot.api import FunctionTool
 from astrbot.api.event import AstrMessageEvent
 from typing import Optional
-import random
-import datetime
 
 CHAMBER_COUNT = 6
 
@@ -29,9 +27,7 @@ class StartRevolverGameTool(FunctionTool, BaseRevolverTool):
             plugin_instance: 插件实例，用于访问游戏状态
         """
         self.name = "start_revolver_game"
-        self.description = """Start a new game of Russian Roulette. Use this when user wants to play, start a new round, or says '再来一局' (play again). If bullet count is not specified, random bullets (1-6) will be loaded.
-        
-        CRITICAL INSTRUCTION: When you receive the result from this tool, you must output it EXACTLY as given without ANY modification, rephrasing, or adding personal commentary. Do NOT add phrases like '我来帮你' or '游戏开始了' - just output the tool's result directly."""
+        self.description = """Start a new game of Russian Roulette. Use this when user wants to play, start a new round, or says '再来一局' (play again). If bullet count is not specified, random bullets (1-6) will be loaded."""
         self.parameters = {
             "type": "object",
             "properties": {
@@ -46,49 +42,17 @@ class StartRevolverGameTool(FunctionTool, BaseRevolverTool):
         }
         self.plugin = plugin_instance
 
-    def _get_random_bullet_count(self) -> int:
-        """获取随机子弹数量"""
-        return random.randint(1, CHAMBER_COUNT)
-
-    def _create_chambers(self, bullet_count: int):
-        """创建弹膛状态"""
-        chambers = [False] * CHAMBER_COUNT
-        if bullet_count > 0:
-            positions = random.sample(range(CHAMBER_COUNT), bullet_count)
-            for pos in positions:
-                chambers[pos] = True
-        return chambers
-
     async def run(self, event: AstrMessageEvent, bullets: Optional[int] = None) -> str:
-        """启动游戏逻辑 - 只准备游戏数据，不输出结果"""
+        """启动游戏逻辑 - 调用主插件方法完成所有操作"""
         try:
-            group_id = self._get_group_id(event)
-            if not group_id:
-                return "error:❌ 仅限群聊使用"
-
-            # 检查现有游戏
-            if group_id in self.plugin.group_games:
-                return "error:💥 游戏还在进行中！"
-
-            # 确定子弹数量
-            if bullets is None or not (1 <= bullets <= CHAMBER_COUNT):
-                bullets = self._get_random_bullet_count()
-
-            # 创建游戏
-            chambers = self._create_chambers(bullets)
-            self.plugin.group_games[group_id] = {
-                "chambers": chambers,
-                "current": 0,
-                "start_time": datetime.datetime.now(),
-            }
-
-            # 启动超时机制
-            if hasattr(self.plugin, "_start_timeout"):
-                await self.plugin._start_timeout(event, group_id)
-
-            return f"game_started:{group_id}:{bullets}"
+            # 调用主插件的启动游戏方法
+            if hasattr(self.plugin, 'ai_start_game'):
+                await self.plugin.ai_start_game(event, bullets)
+                return "游戏启动成功"
+            else:
+                return "error:插件方法未找到"
         except Exception as e:
-            return f"error:{str(e)}"
+            return f"error:游戏启动失败: {str(e)}"
 
 
 class JoinRevolverGameTool(FunctionTool, BaseRevolverTool):
@@ -101,9 +65,7 @@ class JoinRevolverGameTool(FunctionTool, BaseRevolverTool):
             plugin_instance: 插件实例，用于访问游戏状态
         """
         self.name = "join_revolver_game"
-        self.description = """Join the current Russian Roulette game by pulling the trigger. Use this when user says '我要玩', '我也要', '开枪', 'shoot', or wants to participate in an ongoing game.
-        
-        CRITICAL INSTRUCTION: When you receive the result from this tool, you must output it EXACTLY as given without ANY modification, rephrasing, or adding personal touches. Even if the result contains emoji or specific phrasing, output it verbatim. Do NOT add explanations like '结果出来了' or '你开枪了' - just output the tool's result directly."""
+        self.description = """Join the current Russian Roulette game by pulling the trigger. Use this when user says '我要玩', '我也要', '开枪', 'shoot', or wants to participate in an ongoing game."""
         self.parameters = {
             "type": "object",
             "properties": {
@@ -118,47 +80,16 @@ class JoinRevolverGameTool(FunctionTool, BaseRevolverTool):
         self.plugin = plugin_instance
 
     async def run(self, event: AstrMessageEvent, action: str = "shoot") -> str:
-        """参与游戏逻辑 - 只返回动作指令，不执行禁言"""
+        """参与游戏逻辑 - 调用主插件方法完成所有操作"""
         try:
-            group_id = self._get_group_id(event)
-            if not group_id:
-                return "error:❌ 仅限群聊使用"
-
-            game = self.plugin.group_games.get(group_id)
-            if not game:
-                return "error:⚠️ 没有游戏进行中\n💡 使用 /装填 开始游戏（随机装填）\n💡 管理员可使用 /装填 [数量] 指定子弹"
-
-            user_name = self._get_user_name(event)
-            user_id = int(event.get_sender_id())
-
-            chambers = game["chambers"]
-            current = game["current"]
-            hit = chambers[current]
-
-            # 更新游戏状态
-            if hit:
-                chambers[current] = False
-            game["current"] = (current + 1) % CHAMBER_COUNT
-
-            # 检查游戏是否结束
-            game_ended = sum(chambers) == 0
-            if game_ended:
-                if (
-                    hasattr(self.plugin, "timeout_tasks")
-                    and group_id in self.plugin.timeout_tasks
-                ):
-                    task = self.plugin.timeout_tasks[group_id]
-                    if not task.done():
-                        task.cancel()
-                    self.plugin.timeout_tasks.pop(group_id, None)
-                del self.plugin.group_games[group_id]
-
-            # 返回动作指令
-            action_code = "hit" if hit else "miss"
-            return f"game_action:{group_id}:{user_id}:{user_name}:{action_code}:{game_ended}"
-
+            # 调用主插件的加入游戏方法
+            if hasattr(self.plugin, 'ai_join_game'):
+                await self.plugin.ai_join_game(event)
+                return "游戏操作成功"
+            else:
+                return "error:插件方法未找到"
         except Exception as e:
-            return f"error:{str(e)}"
+            return f"error:游戏操作失败: {str(e)}"
 
 
 class CheckRevolverStatusTool(FunctionTool, BaseRevolverTool):
@@ -171,9 +102,7 @@ class CheckRevolverStatusTool(FunctionTool, BaseRevolverTool):
             plugin_instance: 插件实例，用于访问游戏状态
         """
         self.name = "check_revolver_status"
-        self.description = """Check the current status of the Russian Roulette game. Use this when user asks about game status, wants to know remaining bullets, or says '状态', 'status', '游戏情况'.
-        
-        CRITICAL INSTRUCTION: When you receive the result from this tool, you must output it EXACTLY as given without ANY modification, rephrasing, or adding personal commentary. Even if the result looks like '没有游戏进行中', output it directly. Do NOT add phrases like '根据查询' or '我来告诉你' - just output the tool's result verbatim."""
+        self.description = """Check the current status of the Russian Roulette game. Use this when user asks about game status, wants to know remaining bullets, or says '状态', 'status', '游戏情况'."""
         self.parameters = {
             "type": "object",
             "properties": {
@@ -187,22 +116,13 @@ class CheckRevolverStatusTool(FunctionTool, BaseRevolverTool):
         self.plugin = plugin_instance
 
     async def run(self, event: AstrMessageEvent, detailed: bool = False) -> str:
-        """查询游戏状态逻辑 - 只返回状态数据"""
+        """查询游戏状态逻辑 - 调用主插件方法完成所有操作"""
         try:
-            group_id = self._get_group_id(event)
-            if not group_id:
-                return "error:❌ 仅限群聊使用"
-
-            game = self.plugin.group_games.get(group_id)
-            if not game:
-                return "no_game"
-
-            chambers = game["chambers"]
-            current = game["current"]
-            remaining = sum(chambers)
-            is_danger = chambers[current]
-
-            return f"game_status:{group_id}:{remaining}:{current}:{is_danger}"
-
+            # 调用主插件的检查状态方法
+            if hasattr(self.plugin, 'ai_check_status'):
+                await self.plugin.ai_check_status(event)
+                return "状态查询成功"
+            else:
+                return "error:插件方法未找到"
         except Exception as e:
-            return f"error:{str(e)}"
+            return f"error:状态查询失败: {str(e)}"
