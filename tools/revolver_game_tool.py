@@ -1,4 +1,4 @@
-b'yimport asyncio
+import asyncio
 from astrbot.api import FunctionTool, logger
 from astrbot.api.event import AstrMessageEvent
 from typing import Optional
