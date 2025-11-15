@@ -111,13 +111,10 @@ FLEXIBLE USAGE: Trust your judgment - if user seems to want any of these actions
             # 获取配置的延迟时间（默认5秒）作为超时时间
             timeout = getattr(self.plugin, "ai_trigger_delay", 5)
 
-            # 生成唯一标识符
-            unique_id = self._get_unique_id(event)
-
             # 在插件中注册等待事件
             if hasattr(self.plugin, "_register_ai_trigger"):
-                self.plugin._register_ai_trigger(unique_id, action, event)
-                return f"TRIGGER_QUEUED: {action} action queued for {unique_id}, timeout={timeout}s"
+                registered_id = self.plugin._register_ai_trigger(action, event)
+                return f"TRIGGER_QUEUED: {action} action queued as {registered_id}, delay={timeout}s"
             else:
                 # 回退到固定延迟方式
                 await asyncio.sleep(timeout)

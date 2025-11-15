@@ -61,6 +61,7 @@ class RevolverGunPlugin(Star):
 
         # AI触发器事件队列
         self.ai_trigger_queue: Dict[str, Dict] = {}
+        self.ai_trigger_counter = 0  # 用于生成一致的ID
 
         # 数据持久化
         self.data_dir = StarTools.get_data_dir("astrbot_plugin_rg2")
@@ -834,22 +835,28 @@ class RevolverGunPlugin(Star):
 
     # ========== AI触发器管理 ==========
 
-    def _register_ai_trigger(
-        self, unique_id: str, action: str, event: AstrMessageEvent
-    ):
+    def _register_ai_trigger(self, action: str, event: AstrMessageEvent) -> str:
         """注册AI触发器等待事件
 
         Args:
-            unique_id: 唯一标识符
             action: 操作类型
             event: 消息事件对象
+
+        Returns:
+            生成的唯一标识符
         """
+        # 使用插件内部计数器生成一致的ID
+        self.ai_trigger_counter += 1
+        unique_id = f"trigger_{self.ai_trigger_counter}_{event.get_sender_id()}"
+
         logger.info(f"AI trigger registered: {unique_id}, action={action}")
         self.ai_trigger_queue[unique_id] = {
             "action": action,
             "event": event,
             "timestamp": datetime.datetime.now(),
         }
+
+        return unique_id
 
     async def _execute_ai_trigger(self, unique_id: str):
         """执行AI触发的操作
@@ -889,18 +896,21 @@ class RevolverGunPlugin(Star):
             event: 消息事件对象
         """
         try:
-            # 生成唯一标识符
-            unique_id = f"{event.get_sender_id()}_{getattr(event.message_obj, 'message_id', 'unknown')}"
+            # 执行最早的待处理触发器
+            if self.ai_trigger_queue:
+                # 获取最早的触发器
+                oldest_id = min(
+                    self.ai_trigger_queue.keys(),
+                    key=lambda k: self.ai_trigger_queue[k]["timestamp"],
+                )
 
-            # 检查是否有待处理的触发器
-            if unique_id in self.ai_trigger_queue:
+                logger.info(f"Decorating result, executing AI trigger: {oldest_id}")
+
                 # 使用配置的延迟时间
                 delay = self.ai_trigger_delay
-                logger.info(
-                    f"Decorating result, waiting {delay}s before executing AI trigger: {unique_id}"
-                )
+                logger.info(f"Waiting {delay}s before executing")
                 await asyncio.sleep(delay)
-                await self._execute_ai_trigger(unique_id)
+                await self._execute_ai_trigger(oldest_id)
 
         except Exception as e:
             logger.error(f"Decorating result hook failed: {e}")
