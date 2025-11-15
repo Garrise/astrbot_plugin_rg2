@@ -72,6 +72,9 @@ class RevolverGunPlugin(Star):
         self.min_ban = self.config.get("min_ban_seconds", DEFAULT_MIN_BAN)
         self.max_ban = self.config.get("max_ban_seconds", DEFAULT_MAX_BAN)
         self.default_misfire = self.config.get("misfire_enabled_by_default", False)
+        self.ai_trigger_delay = self.config.get(
+            "ai_trigger_delay", 5
+        )  # AI工具触发延迟（秒）
 
         # 注册函数工具
         self._register_function_tools()
@@ -98,26 +101,20 @@ class RevolverGunPlugin(Star):
     def _register_function_tools(self):
         """注册函数工具到AstrBot"""
         try:
-            from .tools.revolver_tools import (
-                StartRevolverGameTool,
-                JoinRevolverGameTool,
-                CheckRevolverStatusTool,
-            )
+            from .tools.revolver_game_tool import RevolverGameTool
 
-            # 初始化工具并传递插件实例
-            start_tool = StartRevolverGameTool(plugin_instance=self)
-            join_tool = JoinRevolverGameTool(plugin_instance=self)
-            check_tool = CheckRevolverStatusTool(plugin_instance=self)
+            # 初始化统一工具并传递插件实例
+            revolver_tool = RevolverGameTool(plugin_instance=self)
 
             # >= v4.5.1 使用新的注册方式
             if hasattr(self.context, "add_llm_tools"):
-                self.context.add_llm_tools(start_tool, join_tool, check_tool)
+                self.context.add_llm_tools(revolver_tool)
             else:
                 # < v4.5.1 兼容旧版本
                 tool_mgr = self.context.provider_manager.llm_tools
-                tool_mgr.func_list.extend([start_tool, join_tool, check_tool])
+                tool_mgr.func_list.append(revolver_tool)
 
-            logger.info("左轮手枪函数工具注册成功")
+            logger.info("左轮手枪统一触发器工具注册成功")
         except Exception as e:
             logger.error(f"注册函数工具失败: {e}", exc_info=True)
 
@@ -964,7 +961,9 @@ class RevolverGunPlugin(Star):
 
         except Exception as e:
             logger.error(f"AI参与游戏失败: {e}")
-            await event.bot.send_group_msg(group_id=group_id, message="❌ 操作失败，请重试")
+            await event.bot.send_group_msg(
+                group_id=group_id, message="❌ 操作失败，请重试"
+            )
 
     async def ai_check_status(self, event: AstrMessageEvent):
         """AI查询游戏状态 - 供AI工具调用
@@ -995,7 +994,9 @@ class RevolverGunPlugin(Star):
             await event.bot.send_group_msg(group_id=group_id, message=response_text)
         except Exception as e:
             logger.error(f"AI查询状态失败: {e}")
-            await event.bot.send_group_msg(group_id=group_id, message="❌ 查询失败，请重试")
+            await event.bot.send_group_msg(
+                group_id=group_id, message="❌ 查询失败，请重试"
+            )
 
     async def terminate(self):
         """插件卸载清理
