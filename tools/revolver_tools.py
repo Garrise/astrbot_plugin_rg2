@@ -1,3 +1,4 @@
+import asyncio
 from astrbot.api import FunctionTool, logger
 from astrbot.api.event import AstrMessageEvent
 from typing import Optional
@@ -49,11 +50,15 @@ Use when user wants to play Russian Roulette or says: '来玩左轮手枪', '轮
         self.plugin = plugin_instance
 
     async def run(self, event: AstrMessageEvent, bullets: Optional[int] = None) -> str:
-        """触发游戏启动 - 让主插件处理所有逻辑"""
+        """触发游戏启动 - 等待LLM发言后再执行游戏逻辑"""
         try:
             if not hasattr(self.plugin, "ai_start_game"):
                 return "SYSTEM_ERROR: Plugin method unavailable"
 
+            # 等待3秒，让LLM有时间完成发言
+            await asyncio.sleep(3)
+
+            # 然后触发游戏逻辑
             await self.plugin.ai_start_game(event, bullets)
             return "TRIGGER_SUCCESS: Game start request processed by plugin"
 
@@ -87,11 +92,15 @@ Use when user wants to shoot or says: '我要玩', '我也要玩', '开枪', 'sh
         self.plugin = plugin_instance
 
     async def run(self, event: AstrMessageEvent) -> str:
-        """触发开枪 - 让主插件处理所有逻辑"""
+        """触发开枪 - 等待LLM发言后再执行游戏逻辑"""
         try:
             if not hasattr(self.plugin, "ai_join_game"):
                 return "SYSTEM_ERROR: Plugin method unavailable"
 
+            # 等待3秒，让LLM有时间完成发言
+            await asyncio.sleep(3)
+
+            # 然后触发开枪逻辑
             await self.plugin.ai_join_game(event)
             return "TRIGGER_SUCCESS: Shot request processed by plugin"
 
@@ -125,11 +134,15 @@ Use when user asks about game status or says: '游戏状态', '状态', 'status'
         self.plugin = plugin_instance
 
     async def run(self, event: AstrMessageEvent) -> str:
-        """触发状态查询 - 让主插件处理所有逻辑"""
+        """触发状态查询 - 等待LLM发言后再执行游戏逻辑"""
         try:
             if not hasattr(self.plugin, "ai_check_status"):
                 return "SYSTEM_ERROR: Plugin method unavailable"
 
+            # 等待3秒，让LLM有时间完成发言
+            await asyncio.sleep(3)
+
+            # 然后触发状态查询逻辑
             await self.plugin.ai_check_status(event)
             return "TRIGGER_SUCCESS: Status check request processed by plugin"
 
