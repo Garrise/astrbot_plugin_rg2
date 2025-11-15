@@ -880,9 +880,9 @@ class RevolverGunPlugin(Star):
         except Exception as e:
             logger.error(f"AI trigger execution failed: {e}")
 
-    @filter.after_message_sent(priority=10)
-    async def _on_message_sent(self, event: AstrMessageEvent):
-        """消息发送后钩子 - 检查并执行待处理的AI触发器
+    @filter.on_decorating_result(priority=10)
+    async def _on_decorating_result(self, event: AstrMessageEvent):
+        """消息装饰钩子 - 在消息发送前检查并执行待处理的AI触发器
 
         Args:
             event: 消息事件对象
@@ -893,7 +893,26 @@ class RevolverGunPlugin(Star):
 
             # 检查是否有待处理的触发器
             if unique_id in self.ai_trigger_queue:
-                logger.info(f"Message sent, executing AI trigger: {unique_id}")
+                logger.info(f"Decorating result, executing AI trigger: {unique_id}")
+                await self._execute_ai_trigger(unique_id)
+
+        except Exception as e:
+            logger.error(f"Decorating result hook failed: {e}")
+
+    @filter.after_message_sent(priority=10)
+    async def _on_message_sent(self, event: AstrMessageEvent):
+        """消息发送后钩子 - 备用触发器检查
+
+        Args:
+            event: 消息事件对象
+        """
+        try:
+            # 生成唯一标识符
+            unique_id = f"{event.get_sender_id()}_{getattr(event.message_obj, 'message_id', 'unknown')}"
+
+            # 检查是否有待处理的触发器（备用机制）
+            if unique_id in self.ai_trigger_queue:
+                logger.info(f"Message sent (backup), executing AI trigger: {unique_id}")
                 await self._execute_ai_trigger(unique_id)
 
         except Exception as e:
