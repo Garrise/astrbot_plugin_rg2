@@ -56,8 +56,10 @@ class RevolverGunPlugin(Star):
 
         # 游戏状态管理
         self.group_games: Dict[int, Dict] = {}
+        self.group_duels: Dict[int, Dict] = {}
         self.group_misfire: Dict[int, bool] = {}
         self.timeout_tasks: Dict[int, asyncio.Task] = {}
+        self.duel_timeout_tasks: Dict[int, asyncio.Task] = {}
 
         # AI触发器事件队列
         self.ai_trigger_queue: Dict[str, Dict] = {}
@@ -441,13 +443,145 @@ class RevolverGunPlugin(Star):
 
     # ========== 独立指令 ==========
 
+    @filter.command("自杀")
+    async def suicide(self, event: AstrMessageEvent):
+        """自杀
+
+        用法: [指令前缀]决斗
+        """
+        try:
+            group_id = self._get_group_id(event)
+            if not group_id:
+                yield event.plain_result("❌ 仅限群聊使用")
+                return
+            
+            user_name = self._get_user_name(event)
+            user_id = int(event.get_sender_id())
+
+            # 检查是否可禁言（管理员/群主免疫）
+            if not await self._is_user_bannable(event, user_id):
+                # 管理员/群主免疫，直接显示免疫提示
+                logger.info(
+                    f"⏭️ 用户 {user_name}({user_id}) 是管理员/群主，免疫中弹"
+                )
+                yield event.plain_result(
+                    f"💥 枪声炸响！\n😱 {user_name} 中弹倒地！\n⚠️ 管理员/群主免疫！"
+                )
+            else:
+                # 普通用户，执行禁言
+                ban_duration = await self._ban_user(event, user_id)
+                if ban_duration > 0:
+                    formatted_duration = self._format_ban_duration(ban_duration)
+                    ban_msg = f"🔇 禁言 {formatted_duration}"
+                else:
+                    ban_msg = "⚠️ 禁言失败！"
+
+                logger.info(f"💥 用户 {user_name}({user_id}) 在群 {group_id} 中弹")
+
+                # 使用YAML文本
+                trigger_msg = text_manager.get_text("trigger_descriptions")
+                reaction_msg = text_manager.get_text(
+                    "user_reactions", sender_nickname=user_name
+                )
+                yield event.plain_result(
+                    f"💥 {trigger_msg}\n😱 {reaction_msg}\n{ban_msg}"
+                )
+        except Exception as e:
+            logger.error(f"自尽失败: {e}")
+            yield event.plain_result("❌ 操作失败，请重试")
+
+    @filter.command("决斗")
+    async def duel(self, event: AstrMessageEvent):
+        """左轮决斗
+
+        用法: [指令前缀]决斗
+        """
+        try:
+            group_id = self._get_group_id(event)
+            if not group_id:
+                yield event.plain_result("❌ 仅限群聊使用")
+                return
+            
+            user_name = self._get_user_name(event)
+            user_id = int(event.get_sender_id())
+
+            #检查是否已有决斗
+            if group_id in self.group_duels:
+                #开始与决斗发起者决斗
+                duel = self.group_duels.get(group_id) or {}
+                starter_id = duel["user_id"]
+                starter_name = duel["user_name"]
+                if random.choice([True, False]):
+                    hit_id = starter_id
+                    hit_name = starter_name
+                else:
+                    hit_id = user_id
+                    hit_name = user_name
+                # 检查是否可禁言（管理员/群主免疫）
+                if not await self._is_user_bannable(event, hit_id):
+                    # 管理员/群主免疫，直接显示免疫提示
+                    logger.info(
+                        f"⏭️ 用户 {hit_name}({hit_id}) 是管理员/群主，免疫中弹"
+                    )
+                    yield event.plain_result(
+                        f"💥 枪声炸响！\n😱 {hit_name} 中弹倒地！\n⚠️ 管理员/群主免疫！"
+                    )
+                else:
+                    # 普通用户，执行禁言
+                    ban_duration = await self._ban_user(event, hit_id)
+                    if ban_duration > 0:
+                        formatted_duration = self._format_ban_duration(ban_duration)
+                        ban_msg = f"🔇 禁言 {formatted_duration}"
+                    else:
+                        ban_msg = "⚠️ 禁言失败！"
+
+                    logger.info(f"💥 用户 {hit_name}({hit_id}) 在群 {group_id} 中弹")
+
+                    # 使用YAML文本
+                    trigger_msg = text_manager.get_text("trigger_descriptions")
+                    reaction_msg = text_manager.get_text(
+                        "user_reactions", sender_nickname=hit_name
+                    )
+                    yield event.plain_result(
+                        f"💥 {trigger_msg}\n😱 {reaction_msg}\n{ban_msg}"
+                    )
+                # 清理超时任务（如果存在）
+                if group_id in self.duel_timeout_tasks:
+                    self.duel_timeout_tasks[group_id].cancel()
+                # 确保从字典中移除（无论是否存在）
+                self.duel_timeout_tasks.pop(group_id, None)
+
+                # 清理游戏状态
+                del self.group_duels[group_id]
+                logger.info(f"群 {group_id} 决斗结束")
+            else:
+                #创建决斗
+                self.group_duels[group_id] = {
+                    "user_name": user_name,
+                    "user_id": user_id,
+                    "start_time": datetime.datetime.now()
+                }
+
+                # 设置超时
+                await self._start_duel_timeout(event, group_id)
+
+                logger.info(f"用户 {user_name} 在群 {group_id} 发起了一场决斗")
+
+                yield event.plain_result(
+                    f"🔫 {user_name}发起了一场决斗！\n"
+                    f"⚡ 限时 {self.timeout} 秒！"
+                )
+        except Exception as e:
+            logger.error(f"决斗失败: {e}")
+            yield event.plain_result("❌ 操作失败，请重试")
+
+
     @filter.command("装填")
     async def load_bullets(self, event: AstrMessageEvent):
         """装填子弹
 
         用法: [指令前缀]装填 [数量]
         不指定数量则随机装填1-6发子弹（所有用户可用）
-        指定数量则装填固定子弹（仅限管理员）
         """
         try:
             group_id = self._get_group_id(event)
@@ -466,14 +600,8 @@ class RevolverGunPlugin(Star):
             # 解析子弹数量
             bullet_count = self._parse_bullet_count(event.message_str or "")
 
-            # 如果指定了子弹数量，检查是否是管理员
-            if bullet_count is not None:
-                if not await self._is_group_admin(event):
-                    yield event.plain_result(
-                        f"😏 {user_name}，你又不是管理才不听你的！\n💡 请使用 /装填 进行随机装填"
-                    )
-                    return
-            else:
+            # 未指定数量，随机装填
+            if bullet_count is None:
                 # 未指定数量，随机装填
                 bullet_count = self._get_random_bullet_count()
 
@@ -603,6 +731,42 @@ class RevolverGunPlugin(Star):
         """左轮手枪游戏指令组"""
         pass
 
+    @revolver_group.command("停止")
+    async def game_stop(self, event: AstrMessageEvent):
+        """停止当前游戏
+
+        用法: [指令前缀]左轮 状态
+        查看当前游戏的子弹剩余情况和弹膛状态
+        """
+        try:
+            group_id = self._get_group_id(event)
+            if not group_id:
+                yield event.plain_result("❌ 仅限群聊使用")
+                return
+            
+            game = self.group_games.get(group_id)
+            if not game:
+                yield event.plain_result(
+                    "🔍 没有游戏进行中\n💡 使用 /装填 开始游戏（随机装填）\n💡 可使用 /装填 [数量] 指定子弹"
+                )
+                return
+            # 清理超时任务（如果存在）
+            if group_id in self.timeout_tasks:
+                self.timeout_tasks[group_id].cancel()
+            # 确保从字典中移除（无论是否存在）
+            self.timeout_tasks.pop(group_id, None)
+
+            # 清理游戏状态
+            del self.group_games[group_id]
+            logger.info(f"群 {group_id} 游戏结束")
+            # 使用YAML文本
+            end_msg = text_manager.get_text("game_end")
+            yield event.plain_result(f"🏁 {end_msg}\n🔄 再来一局？")
+        except Exception as e:
+            logger.error(f"停止失败: {e}")
+            yield event.plain_result("❌ 操作失败，请重试")
+
+
     @revolver_group.command("状态")
     async def game_status(self, event: AstrMessageEvent):
         """查看游戏状态
@@ -619,7 +783,7 @@ class RevolverGunPlugin(Star):
             game = self.group_games.get(group_id)
             if not game:
                 yield event.plain_result(
-                    "🔍 没有游戏进行中\n💡 使用 /装填 开始游戏（随机装填）\n💡 管理员可使用 /装填 [数量] 指定子弹"
+                    "🔍 没有游戏进行中\n💡 使用 /装填 开始游戏（随机装填）\n💡 可使用 /装填 [数量] 指定子弹"
                 )
                 return
 
@@ -784,6 +948,48 @@ class RevolverGunPlugin(Star):
             logger.error(f"随机走火监听失败: {e}")
 
     # ========== 辅助功能 ==========
+
+    async def _start_duel_timeout(self, event: AstrMessageEvent, group_id: int):
+        # 取消之前的超时任务（如果存在）
+        if group_id in self.duel_timeout_tasks:
+            task = self.duel_timeout_tasks[group_id]
+            if not task.done():
+                task.cancel()
+
+        # 保存必要的信息用于超时回调
+        bot = event.bot
+
+        # 创建新的超时任务
+        async def timeout_check():
+            try:
+                await asyncio.sleep(self.timeout)
+                # 检查游戏是否还在进行
+                if group_id in self.group_duels:
+                    # 清理游戏状态
+                    del self.group_duels[group_id]
+
+                    # 发送超时通知（使用bot对象）
+                    try:
+                        timeout_msg = text_manager.get_text("timeout")
+                        if hasattr(bot, "send_group_msg"):
+                            await bot.send_group_msg(
+                                group_id=group_id,
+                                message=f"⏰ {timeout_msg}\n⏱️ {self.timeout} 秒无人操作\n🏁 决斗已自动结束",
+                            )
+                    except Exception as e:
+                        logger.error(f"发送超时通知失败: {e}")
+
+                    logger.info(f"群 {group_id} 游戏因超时而结束")
+            except asyncio.CancelledError:
+                # 任务被取消，说明有新操作
+                pass
+            except Exception as e:
+                logger.error(f"超时检查失败: {e}")
+
+        # 启动超时任务
+        self.duel_timeout_tasks[group_id] = asyncio.create_task(timeout_check())
+        logger.debug(f"群 {group_id} 超时任务已启动，{self.timeout} 秒后触发")
+
 
     async def _start_timeout(self, event: AstrMessageEvent, group_id: int):
         """启动超时机制
@@ -1088,7 +1294,7 @@ class RevolverGunPlugin(Star):
                 del self.group_games[group_id]
                 logger.info(f"AI: 群 {group_id} 游戏结束")
                 # 使用YAML文本
-                end_msg = text_manager.get_text("game_end")
+                end_msg = "游戏已结束"
                 await event.bot.send_group_msg(
                     group_id=group_id, message=f"🏁 {end_msg}\n🔄 再来一局？"
                 )
@@ -1113,7 +1319,7 @@ class RevolverGunPlugin(Star):
         try:
             game = self.group_games.get(group_id)
             if not game:
-                response_text = "🔍 没有游戏进行中\n💡 使用 /装填 开始游戏（随机装填）\n💡 管理员可使用 /装填 [数量] 指定子弹"
+                response_text = "🔍 没有游戏进行中\n💡 使用 /装填 开始游戏（随机装填）\n💡 可使用 /装填 [数量] 指定子弹"
             else:
                 chambers = game["chambers"]
                 current = game["current"]
