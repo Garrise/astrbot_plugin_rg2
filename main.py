@@ -761,7 +761,7 @@ class RevolverGunPlugin(Star):
             logger.info(f"群 {group_id} 游戏结束")
             # 使用YAML文本
             end_msg = text_manager.get_text("game_end")
-            yield event.plain_result(f"🏁 {end_msg}\n🔄 再来一局？")
+            yield event.plain_result(f"🏁 游戏结束")
         except Exception as e:
             logger.error(f"停止失败: {e}")
             yield event.plain_result("❌ 操作失败，请重试")
